@@ -22,26 +22,16 @@ async function main () {
     await mongoose.connect(dbUrl);
 }
 app.set("view engine","ejs");
-app.set("views",path.join(__dirname,"views"));
+
 app.use(express.urlencoded({extended:true}));
-app.use(methodOverride("_method"));
-app.engine('ejs', ejsMate);
+
+
 app.use(express.static(path.join(__dirname,"/public")));
 
-const store = MongoStore.create({
-    mongoUrl:dbUrl,
-    crypto: {
-        secret : process.env.SECRET,
-    },
-    touchAfter : 24 *3600,
-    
-});
-store.on("error",() => {
-    console.log("ERROR in mongo session store",err);
-});
+
 
 const sessionOptions = {
-    store,
+    
     secret : process.env.SECRET,
     resave : false,
     saveUninitialized : true,
@@ -55,12 +45,12 @@ const sessionOptions = {
 
 
 app.use(session(sessionOptions));
-//app.use(flash());
+
 
 app.use(passport.initialize());
 app.use(passport.session()); 
 passport.use(new LocalStrategy(User.authenticate()));
-// use static serialize and deserialize of model for passport session support
+
 passport.serializeUser(User.serializeUser());
 passport.deserializeUser(User.deserializeUser());
 
@@ -70,16 +60,21 @@ app.get('/signup',(req,res)=>{
 
 app.post('/signup',async(req,res)=>{
     let {name,username,password,email}=req.body;
+    try{
     const newUser=new User({name:name,username:username,password:password,email:email});
-    await User.register(User,password);
-
-    await newUser.save().then(()=>{
-        let newid=uuidv4();
-       setUser(newid,newUser);
-    });
+    await User.register(newUser,password);
 
     
-});
+        let newid=uuidv4();
+       setUser(newid,newUser);
+    }
+catch(error){
+    console.log("error occured:"+error);
+}});
+    
+
+    
+
 
 app.get('/login',(req,res)=>{
     res.render('login');
@@ -87,7 +82,7 @@ app.get('/login',(req,res)=>{
 
 app.post('/login',passport.authenticate("local",{failureRedirect:'/login'}),(req,res)=>{
     let username=req.body.username;
-res.redirect('/user/:${username}')
+res.redirect(`/user/:${username}`)
 });
 
 const isAuthenticated=(req,res,next)=>{
@@ -100,23 +95,52 @@ app.get('/user/:username',isAuthenticated,async(req,res)=>{
     res.render('UserHomePage',{arr});
 });
 
-app.get('/user/:username/chat',async(req,res)=>{
-    let {id}=req.query;
-    let user=req.params.username;
-    let sender=getUserByUserName(user);
-    if(!id) console.log("some error occurred");
-    else{
-        const receiver=getUser(id);
-        const chat=await Chat.find().where('from','to').equals(sender.username,receiver.username);
+app.get('/user/:username/chat', async (req, res) => {
+    const { id } = req.query; 
+    const user = req.params.username; 
+    try {
+        if (!id) {
+            console.log("ID is missing in query parameters");
+            return res.status(400).send("Chat ID is required");
+        }
+
+        
+        const sender = await getUserByUserName(user);
+        if (!sender) {
+            console.log(`Sender with username '${user}' not found`);
+            return res.status(404).send("Sender not found");
+        }
+
+       
+        const receiver = getUser(id);
+        if (!receiver) {
+            console.log(`Receiver with ID '${id}' not found`);
+            return res.status(404).send("Receiver not found");
+        }
+
+        
+        const chat = await Chat.find({ from: sender.username, to: receiver.username });
+
+        
+        res.render('UserChatPage', { chat });
+    } catch (error) {
+        console.error("An error occurred while fetching chat data:", error);
+        res.status(500).send("Internal Server Error");
     }
-    res.render('UserChatPage',{chat});
 });
 
-async function getUserByUserName(username){
-    let requiredUser=await User.find().where('username').equals(user).then(()=>{}).catch(err=>console.error(err));
-    if(requiredUser) return requiredUser;
-    console.log("error occured when fetching data from database");
 
+async function getUserByUserName(username){
+
+   try{
+    requiredUser=await Chat.find({username});
+    return requiredUser;
+   }
+    catch(error){
+        console.log("error occured at getUserByUserName function:"+error);
+        return null;
+    }
+    
 }
 
 app.post('/user/:username/chat',async(req,res)=>{
@@ -125,9 +149,15 @@ app.post('/user/:username/chat',async(req,res)=>{
     let{t}=req.query;
     let{content}=req.body;
     let u1=getUser(t);
+    try{
     let newChat=new Chat({from:userName,to:u1.username,content:content});
     await newChat.save();
     res.redirect('/user/:username/chat');
+    }
+    catch(err){
+        console.log("Error saving chat");
+        res.status(500).error(err);
+    }
 
 
 });

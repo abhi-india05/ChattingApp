@@ -1,14 +1,14 @@
 {
-  "name": "chatapp",
+  "name": "frontend",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Abhishek_J_Holla",
+  "author": "",
   "license": "ISC",
   "dependencies": {
-    "chatapp": "file:"
+    "axios": "^1.7.9"
   }
 }
